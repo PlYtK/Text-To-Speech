@@ -1,9 +1,5 @@
 # Twitch Text-To-Speech
 
-<div align="right">
-  <strong>English</strong> | <a href="README.ru.md">Русский</a>
-</div>
-
 Minimalist pixelated desktop application that reads Twitch chat messages aloud using SAPI5 voices on Windows. Features a deep black pixel aesthetic, high-contrast typography, and dynamic adaptation to the Windows system accent color.
 
 ## Features
