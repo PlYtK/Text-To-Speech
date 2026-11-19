@@ -15,11 +15,20 @@ from PyQt5.QtCore import QThread, pyqtSignal
 from PyQt5.QtWidgets import QApplication, QMainWindow
 from twitchio.ext import commands
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-UI_PATH = os.path.join(BASE_DIR, 'MainWindow.ui')
-SETTINGS_PATH = os.path.join(BASE_DIR, 'settings.json')
 
-BLACKLIST = {'idktion'}   # ники в нижнем регистре
+def resource_path(name):
+    base = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(base, name)
+
+
+if getattr(sys, 'frozen', False):
+    APP_DIR = os.path.dirname(sys.executable)
+else:
+    APP_DIR = os.path.dirname(os.path.abspath(__file__))
+
+UI_PATH = resource_path('MainWindow.ui')
+SETTINGS_PATH = os.path.join(APP_DIR, 'settings.json')
+
 RATE = 0                  # от -10 до 10
 PAUSE_MS = 300            # тишина перед фразой
 TAIL_SEC = 0.3            # ожидание после фразы
@@ -68,11 +77,12 @@ class TTS:
 
 
 class TwitchBot(commands.Bot):
-    def __init__(self, token, channel, loop, on_log, on_text):
+    def __init__(self, token, channel, loop, on_log, on_text, blacklist):
         super().__init__(token=token, prefix='!!!',
                          initial_channels=[channel], loop=loop)
         self.on_log = on_log
         self.on_text = on_text
+        self.blacklist = blacklist
 
     async def event_ready(self):
         self.on_log(f'Подключено как {self.nick}')
@@ -80,7 +90,7 @@ class TwitchBot(commands.Bot):
     async def event_message(self, message):
         if message.echo or not message.content:
             return
-        if message.author.name.lower() in BLACKLIST:
+        if message.author.name.lower() in self.blacklist:
             return
 
         content = message.content
@@ -99,11 +109,12 @@ class BotThread(QThread):
     log = pyqtSignal(str)
     stopped = pyqtSignal()
 
-    def __init__(self, token, channel, tts):
+    def __init__(self, token, channel, tts, blacklist):
         super().__init__()
         self.token = token.replace('oauth:', '').strip()
         self.channel = channel.strip().lstrip('#')
         self.tts = tts
+        self.blacklist = blacklist
         self.loop = None
         self.bot = None
 
@@ -112,7 +123,7 @@ class BotThread(QThread):
         asyncio.set_event_loop(self.loop)
         try:
             self.bot = TwitchBot(self.token, self.channel, self.loop,
-                                 self.log.emit, self.tts.speak)
+                                 self.log.emit, self.tts.speak, self.blacklist)
             self.loop.run_until_complete(self.bot.start())
         except Exception as e:
             self.log.emit(f'Ошибка: {e}')
@@ -132,6 +143,7 @@ class Window(QMainWindow):
 
         self.tts = TTS()
         self.thread = None
+        self.blacklist = set()
 
         self.voiceBox.addItems(list_voices())
         self.load_settings()
@@ -141,6 +153,9 @@ class Window(QMainWindow):
         self.volumeSlider.valueChanged.connect(self.apply_audio)
         self.startButton.clicked.connect(self.toggle)
         self.clearLogButton.clicked.connect(self.logView.clear)
+        self.blacklistAddButton.clicked.connect(self.add_blacklist)
+        self.blacklistEdit.returnPressed.connect(self.add_blacklist)
+        self.blacklistRemoveButton.clicked.connect(self.remove_blacklist)
 
     def apply_audio(self, *_):
         self.tts.voice_name = self.voiceBox.currentText()
@@ -152,6 +167,28 @@ class Window(QMainWindow):
         if self.autoScrollCheck.isChecked():
             sb = self.logView.verticalScrollBar()
             sb.setValue(sb.maximum())
+
+    def add_blacklist(self):
+        name = self.blacklistEdit.text().strip().lstrip('@').lower()
+        self.blacklistEdit.clear()
+        if not name or name in self.blacklist:
+            return
+        self.blacklist.add(name)
+        self.refresh_blacklist()
+        self.append_log(f'В чёрный список добавлен: {name}')
+
+    def remove_blacklist(self):
+        item = self.blacklistList.currentItem()
+        if item is None:
+            return
+        name = item.text()
+        self.blacklist.discard(name)
+        self.refresh_blacklist()
+        self.append_log(f'Из чёрного списка удалён: {name}')
+
+    def refresh_blacklist(self):
+        self.blacklistList.clear()
+        self.blacklistList.addItems(sorted(self.blacklist))
 
     def toggle(self):
         if self.thread and self.thread.isRunning():
@@ -166,7 +203,7 @@ class Window(QMainWindow):
             self.tabWidget.setCurrentWidget(self.tabLog)
             return
 
-        self.thread = BotThread(token, channel, self.tts)
+        self.thread = BotThread(token, channel, self.tts, self.blacklist)
         self.thread.log.connect(self.append_log)
         self.thread.stopped.connect(self.on_stopped)
         self.thread.start()
@@ -194,6 +231,8 @@ class Window(QMainWindow):
         i = self.voiceBox.findText(s.get('voice', ''))
         if i >= 0:
             self.voiceBox.setCurrentIndex(i)
+        self.blacklist.update(str(n).lower() for n in s.get('blacklist', []))
+        self.refresh_blacklist()
 
     def closeEvent(self, event):
         s = {
@@ -201,6 +240,7 @@ class Window(QMainWindow):
             'voice': self.voiceBox.currentText(),
             'volume': self.volumeSlider.value(),
             'token': self.tokenEdit.text() if self.rememberCheck.isChecked() else '',
+            'blacklist': sorted(self.blacklist),
         }
         with open(SETTINGS_PATH, 'w', encoding='utf-8') as f:
             json.dump(s, f, ensure_ascii=False, indent=2)

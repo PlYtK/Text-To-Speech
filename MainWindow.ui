@@ -168,6 +168,41 @@
         </item>
        </layout>
       </widget>
+      <widget class="QWidget" name="tabBlacklist">
+       <attribute name="title">
+        <string>Чёрный список</string>
+       </attribute>
+       <layout class="QVBoxLayout" name="blacklistTabLayout">
+        <item>
+         <layout class="QHBoxLayout" name="blacklistAddLayout">
+          <item>
+           <widget class="QLineEdit" name="blacklistEdit">
+            <property name="placeholderText">
+             <string>Ник пользователя</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="blacklistAddButton">
+            <property name="text">
+             <string>Добавить</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <widget class="QListWidget" name="blacklistList"/>
+        </item>
+        <item>
+         <widget class="QPushButton" name="blacklistRemoveButton">
+          <property name="text">
+           <string>Удалить выбранного</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
       <widget class="QWidget" name="tabRewards">
        <attribute name="title">
         <string>Награда за баллы</string>
